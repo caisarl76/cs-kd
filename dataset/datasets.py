@@ -1,10 +1,11 @@
 import csv, torchvision, numpy as np, random, os
 from PIL import Image
-
+import warnings
+import bisect
 from torch.utils.data import Sampler, Dataset, DataLoader, BatchSampler, SequentialSampler, RandomSampler, Subset
 from torchvision import transforms, datasets
 from collections import defaultdict
-
+from dataset.imbalance_cifar import IMBALANCECIFAR10, IMBALANCECIFAR100
 
 class PairBatchSampler(Sampler):
     def __init__(self, dataset, batch_size, num_iterations=None):
@@ -154,7 +155,7 @@ class ConcatWrapper(Dataset): # TODO: Naming
 
 
 
-def load_dataset(name, root, sample='default', **kwargs):
+def load_dataset(name, root, imb_ratio, sample='default', **kwargs):
     # Dataset
     if name in ['imagenet','tinyimagenet', 'CUB200', 'STANFORD120', 'MIT67']:
         # TODO
@@ -228,14 +229,25 @@ def load_dataset(name, root, sample='default', **kwargs):
             transforms.ToTensor(),
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])
-
-        if name == 'cifar10':
-            CIFAR = datasets.CIFAR10
-        else:
+        if name.startswith('cifar100'):
             CIFAR = datasets.CIFAR100
+            valset = DatasetWrapper(CIFAR(root, train=False, download=True, transform=transform_test))
+            if name.endswith('lt'):
+                train_dataset = IMBALANCECIFAR100(phase='train', imbalance_ratio=imb_ratio, root=root)
+                trainset = DatasetWrapper(train_dataset)
+            else:
+                trainset = DatasetWrapper(CIFAR(root, train=True, download=True, transform=transform_train))
 
-        trainset = DatasetWrapper(CIFAR(root, train=True,  download=True, transform=transform_train))
-        valset   = DatasetWrapper(CIFAR(root, train=False, download=True, transform=transform_test))
+        elif name.startswith('cifar10'):
+            CIFAR = datasets.CIFAR10
+            valset = DatasetWrapper(CIFAR(root, train=False, download=True, transform=transform_test))
+            if name.endswith('lt'):
+                train_dataset = IMBALANCECIFAR10(phase='train', imbalance_ratio=imb_ratio, root=root)
+                trainset = DatasetWrapper(train_dataset)
+            else:
+                trainset = DatasetWrapper(CIFAR(root, train=True, download=True, transform=transform_train))
+
+
     else:
         raise Exception('Unknown dataset: {}'.format(name))
 

@@ -1,21 +1,20 @@
 from __future__ import print_function
 
 import argparse
-import csv
 import os, logging
 
-import numpy as np
 import torch
-from torch.autograd import Variable, grad
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
+import torchvision.datasets as torch_dataset
 import torchvision.transforms as transforms
 
 import models
 from utils import progress_bar, set_logging_defaults
-from datasets import load_dataset
+from dataset.datasets import load_dataset
+from dataset.imbalance_cifar import IMBALANCECIFAR10, IMBALANCECIFAR100
+
 
 parser = argparse.ArgumentParser(description='CS-KD Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
@@ -29,6 +28,7 @@ parser.add_argument('--ngpu', default=1, type=int, help='number of gpu')
 parser.add_argument('--sgpu', default=0, type=int, help='gpu index (start)')
 parser.add_argument('--dataset', default='cifar100', type=str, help='the name for dataset cifar100 | tinyimagenet | CUB200 | STANFORD120 | MIT67')
 parser.add_argument('--dataroot', default='~/data/', type=str, help='data directory')
+parser.add_argument('--imb_ratio', default=0.1, type=float)
 parser.add_argument('--saveroot', default='./results', type=str, help='save directory')
 parser.add_argument('--cls', '-cls', action='store_true', help='adding cls loss')
 parser.add_argument('--temp', default=4.0, type=float, help='temperature scaling')
@@ -42,12 +42,31 @@ start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
 cudnn.benchmark = True
 
+normalize = transforms.Normalize(mean=[x / 255.0 for x in [125.3, 123.0, 113.9]],
+                                     std=[x / 255.0 for x in [63.0, 62.1, 66.7]])
+transform_train = transforms.Compose([
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    normalize,
+])
+
+transform_test = transforms.Compose([
+    transforms.ToTensor(),
+    normalize
+])
+
+
 # Data
 print('==> Preparing dataset: {}'.format(args.dataset))
+# if args.dataset == 'cifar100_lt':
+    # train_dataset = IMBALANCECIFAR10(phase='train', imbalance_ratio=args.imb_ratio, root=args.dataroot)
+    # val_dataset = torch_dataset.CIFAR100(root=args.dataroot, train=True, download=True, transform=transform_train)
+    # train_loader =
 if not args.cls:
-    trainloader, valloader = load_dataset(args.dataset, args.dataroot, batch_size=args.batch_size)
+    trainloader, valloader = load_dataset(args.dataset, args.dataroot, args.imb_ratio, batch_size=args.batch_size)
 else:
-    trainloader, valloader = load_dataset(args.dataset, args.dataroot, 'pair', batch_size=args.batch_size)
+    trainloader, valloader = load_dataset(args.dataset, args.dataroot, args.imb_ratio, 'pair', batch_size=args.batch_size)
 
 
 num_class = trainloader.dataset.num_classes
